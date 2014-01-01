@@ -200,7 +200,7 @@ int main(int argc, char **argv)
 		fd = STDOUT_FILENO;
 	}
 
-	exitcode = make_ext4fs_internal(fd, directory, mountpoint, fs_config_func, gzip,
+	exitcode = make_extfs_internal(fd, "ext4", directory, mountpoint, fs_config_func, gzip,
 			sparse, crc, wipe, sehnd, verbose);
 	close(fd);
 

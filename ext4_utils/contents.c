@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 #ifdef HAVE_ANDROID_OS
 #include <linux/capability.h>
@@ -86,6 +87,32 @@ static struct ext4_dir_entry_2 *add_dentry(u8 *data, u32 *offset,
 	return dentry;
 }
 
+static u8 *inode_allocate_data(struct ext4_inode *inode, u64 len,
+		u64 backing_len)
+{
+	if (info.feat_incompat & EXT3_FEATURE_INCOMPAT_EXTENTS) {
+		return inode_allocate_data_extents(inode, len, backing_len);
+	} else {
+		if (len > ULONG_MAX || backing_len > ULONG_MAX)
+			critical_error("allocation too large and extents not available");
+		return inode_allocate_data_indirect(inode, (unsigned long) len,
+				(unsigned long) backing_len);
+	}
+}
+
+static void inode_allocate_file(struct ext4_inode *inode, u64 len,
+		const char *filename)
+{
+	if (info.feat_incompat & EXT3_FEATURE_INCOMPAT_EXTENTS) {
+		inode_allocate_file_extents(inode, len, filename);
+	} else {
+		if (len > ULONG_MAX)
+			critical_error("allocation too large and extents not available");
+		inode_allocate_file_indirect(inode, (unsigned long) len,
+				filename);
+	}
+}
+
 /* Creates a directory structure for an array of directory entries, dentries,
    and stores the location of the structure in an inode.  The new inode's
    .. link is set to dir_inode_num.  Stores the location of the inode number
@@ -127,7 +154,7 @@ u32 make_directory(u32 dir_inode_num, u32 entries, struct dentry *dentries,
 		return EXT4_ALLOCATE_FAILED;
 	}
 
-	data = inode_allocate_data_extents(inode, len, len);
+	data = inode_allocate_data(inode, len, len);
 	if (data == NULL) {
 		error("failed to allocate %u extents", len);
 		return EXT4_ALLOCATE_FAILED;
@@ -189,7 +216,7 @@ u32 make_file(const char *filename, u64 len)
 	}
 
 	if (len > 0)
-		inode_allocate_file_extents(inode, len, filename);
+		inode_allocate_file(inode, len, filename);
 
 	inode->i_mode = S_IFREG;
 	inode->i_links_count = 1;

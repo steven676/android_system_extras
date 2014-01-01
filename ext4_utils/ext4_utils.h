@@ -176,7 +176,7 @@ typedef void (*fs_config_func_t)(const char *path, int dir, unsigned *uid, unsig
 
 struct selabel_handle;
 
-int make_ext4fs_internal(int fd, const char *directory,
+int make_extfs_internal(int fd, const char *fstype, const char *directory,
                          const char *mountpoint, fs_config_func_t fs_config_func, int gzip,
                          int sparse, int crc, int wipe,
                          struct selabel_handle *sehnd, int verbose);

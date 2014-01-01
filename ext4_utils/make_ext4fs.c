@@ -370,17 +370,17 @@ void reset_ext4fs_info() {
     }
 }
 
-int make_ext4fs_sparse_fd(int fd, long long len,
-                const char *mountpoint, struct selabel_handle *sehnd)
+int make_extfs_sparse_fd(int fd, const char *fstype, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd, int flags)
 {
 	reset_ext4fs_info();
 	info.len = len;
 
-	return make_ext4fs_internal(fd, NULL, mountpoint, NULL, 0, 1, 0, 0, sehnd, 0);
+	return make_extfs_internal(fd, fstype, NULL, mountpoint, NULL, 0, 1, 0, 0, sehnd, 0);
 }
 
-int make_ext4fs(const char *filename, long long len,
-                const char *mountpoint, struct selabel_handle *sehnd)
+int make_extfs(const char *filename, const char *fstype, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd, int flags)
 {
 	int fd;
 	int status;
@@ -394,10 +394,22 @@ int make_ext4fs(const char *filename, long long len,
 		return EXIT_FAILURE;
 	}
 
-	status = make_ext4fs_internal(fd, NULL, mountpoint, NULL, 0, 0, 0, 1, sehnd, 0);
+	status = make_extfs_internal(fd, fstype, NULL, mountpoint, NULL, 0, 0, 0, 1, sehnd, 0);
 	close(fd);
 
 	return status;
+}
+
+int make_ext4fs_sparse_fd(int fd, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd)
+{
+	return make_extfs_sparse_fd(fd, "ext4", len, mountpoint, sehnd, 0);
+}
+
+int make_ext4fs(const char *filename, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd)
+{
+	return make_extfs(filename, "ext4", len, mountpoint, sehnd, 0);
 }
 
 /* return a newly-malloc'd string that is a copy of str.  The new string
@@ -457,7 +469,7 @@ static char *canonicalize_rel_slashes(const char *str)
 	return canonicalize_slashes(str, false);
 }
 
-int make_ext4fs_internal(int fd, const char *_directory,
+int make_extfs_internal(int fd, const char *fstype, const char *_directory,
                          const char *_mountpoint, fs_config_func_t fs_config_func, int gzip,
                          int sparse, int crc, int wipe,
                          struct selabel_handle *sehnd, int verbose)
@@ -494,11 +506,15 @@ int make_ext4fs_internal(int fd, const char *_directory,
 	/* Round down the filesystem length to be a multiple of the block size */
 	info.len &= ~((u64)info.block_size - 1);
 
+	/* Don't create a journal if an ext2 filesystem is requested */
+	if (strcmp(fstype, "ext2") == 0)
+		info.no_journal = 1;
+
 	if (info.journal_blocks == 0)
 		info.journal_blocks = compute_journal_blocks();
 
 	if (info.no_journal == 0)
-		info.feat_compat = EXT4_FEATURE_COMPAT_HAS_JOURNAL;
+		info.feat_compat = EXT3_FEATURE_COMPAT_HAS_JOURNAL;
 	else
 		info.journal_blocks = 0;
 
@@ -517,18 +533,23 @@ int make_ext4fs_internal(int fd, const char *_directory,
 	info.inodes_per_group = compute_inodes_per_group();
 
 	info.feat_compat |=
-			EXT4_FEATURE_COMPAT_RESIZE_INODE |
-			EXT4_FEATURE_COMPAT_EXT_ATTR;
+			EXT2_FEATURE_COMPAT_RESIZE_INODE |
+			EXT2_FEATURE_COMPAT_EXT_ATTR;
 
 	info.feat_ro_compat |=
-			EXT4_FEATURE_RO_COMPAT_SPARSE_SUPER |
-			EXT4_FEATURE_RO_COMPAT_LARGE_FILE |
-			EXT4_FEATURE_RO_COMPAT_GDT_CSUM;
+			EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER |
+			EXT2_FEATURE_RO_COMPAT_LARGE_FILE;
 
 	info.feat_incompat |=
-			EXT4_FEATURE_INCOMPAT_EXTENTS |
-			EXT4_FEATURE_INCOMPAT_FILETYPE;
+			EXT2_FEATURE_INCOMPAT_FILETYPE;
 
+	/* Enable ext4-specific features */
+	if (strcmp(fstype, "ext4") == 0) {
+		info.feat_ro_compat |=
+			EXT4_FEATURE_RO_COMPAT_GDT_CSUM;
+		info.feat_incompat |=
+			EXT3_FEATURE_INCOMPAT_EXTENTS;
+	}
 
 	info.bg_desc_reserve_blocks = compute_bg_desc_reserve_blocks();
 
@@ -549,17 +570,17 @@ int make_ext4fs_internal(int fd, const char *_directory,
 
 	info.sparse_file = sparse_file_new(info.block_size, info.len);
 
-	block_allocator_init();
+	block_allocator_init(!(info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_GDT_CSUM));
 
 	ext4_fill_in_sb();
 
 	if (reserve_inodes(0, 10) == EXT4_ALLOCATE_FAILED)
 		error("failed to reserve first 10 inodes");
 
-	if (info.feat_compat & EXT4_FEATURE_COMPAT_HAS_JOURNAL)
+	if (info.feat_compat & EXT3_FEATURE_COMPAT_HAS_JOURNAL)
 		ext4_create_journal_inode();
 
-	if (info.feat_compat & EXT4_FEATURE_COMPAT_RESIZE_INODE)
+	if (info.feat_compat & EXT2_FEATURE_COMPAT_RESIZE_INODE)
 		ext4_create_resize_inode();
 
 #ifdef USE_MINGW

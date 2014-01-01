@@ -23,6 +23,13 @@ extern "C" {
 
 struct selabel_handle;
 
+int make_extfs(const char *filename, const char *fstype, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd,
+                int flags);
+int make_extfs_sparse_fd(int fd, const char *fstype, long long len,
+                const char *mountpoint, struct selabel_handle *sehnd,
+                int flags);
+
 int make_ext4fs(const char *filename, long long len,
                 const char *mountpoint, struct selabel_handle *sehnd);
 int make_ext4fs_sparse_fd(int fd, long long len,

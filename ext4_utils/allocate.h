@@ -25,7 +25,7 @@
 
 struct block_allocation;
 
-void block_allocator_init();
+void block_allocator_init(int init_inode_tables);
 void block_allocator_free();
 u32 allocate_block();
 struct block_allocation *allocate_blocks(u32 len);

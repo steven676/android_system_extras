@@ -337,9 +337,16 @@ void ext4_create_journal_inode()
 		return;
 	}
 
-	u8 *journal_data = inode_allocate_data_extents(inode,
+	u8 *journal_data = NULL;
+	if (info.feat_incompat & EXT3_FEATURE_INCOMPAT_EXTENTS) {
+		journal_data = inode_allocate_data_extents(inode,
 			info.journal_blocks * info.block_size,
 			info.journal_blocks * info.block_size);
+	} else {
+		journal_data = inode_allocate_data_indirect(inode,
+			info.journal_blocks * info.block_size,
+			info.journal_blocks * info.block_size);
+	}
 	if (!journal_data) {
 		error("failed to allocate extents for journal data");
 		return;

@@ -318,7 +318,7 @@ static void init_bg(struct block_group_info *bg, unsigned int i)
 	}
 }
 
-void block_allocator_init()
+void block_allocator_init(int init_inode_tables)
 {
 	unsigned int i;
 
@@ -326,8 +326,11 @@ void block_allocator_init()
 	if (aux_info.bgs == NULL)
 		critical_error_errno("calloc");
 
-	for (i = 0; i < aux_info.groups; i++)
+	for (i = 0; i < aux_info.groups; i++) {
 		init_bg(&aux_info.bgs[i], i);
+		if (init_inode_tables)
+			allocate_bg_inode_table(&aux_info.bgs[i]);
+	}
 }
 
 void block_allocator_free()
