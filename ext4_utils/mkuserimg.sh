@@ -35,8 +35,8 @@ SIZE=$5
 FC=$6
 
 case $EXT_VARIANT in
-  ext4) ;;
-  *) echo "Only ext4 is supported!"; exit 3 ;;
+  ext4|ext3|ext2) ;;
+  *) echo "Unknown ext* variant!"; exit 3 ;;
 esac
 
 if [ -z $MOUNT_POINT ]; then
@@ -53,7 +53,7 @@ if [ -n "$FC" ]; then
     FCOPT="-S $FC"
 fi
 
-MAKE_EXT4FS_CMD="make_ext4fs $ENABLE_SPARSE_IMAGE $FCOPT -l $SIZE -a $MOUNT_POINT $OUTPUT_FILE $SRC_DIR"
+MAKE_EXT4FS_CMD="make_ext4fs -T $EXT_VARIANT $ENABLE_SPARSE_IMAGE $FCOPT -l $SIZE -a $MOUNT_POINT $OUTPUT_FILE $SRC_DIR"
 echo $MAKE_EXT4FS_CMD
 $MAKE_EXT4FS_CMD
 if [ $? -ne 0 ]; then

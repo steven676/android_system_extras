@@ -49,7 +49,7 @@ extern struct fs_info info;
 
 static void usage(char *path)
 {
-	fprintf(stderr, "%s [ -l <len> ] [ -j <journal size> ] [ -b <block_size> ]\n", basename(path));
+	fprintf(stderr, "%s [ -T fstype ] [ -l <len> ] [ -j <journal size> ] [ -b <block_size> ]\n", basename(path));
 	fprintf(stderr, "    [ -g <blocks per group> ] [ -i <inodes> ] [ -I <inode size> ]\n");
 	fprintf(stderr, "    [ -L <label> ] [ -f ] [ -a <android mountpoint> ]\n");
 	fprintf(stderr, "    [ -S file_contexts ]\n");
@@ -62,6 +62,7 @@ int main(int argc, char **argv)
 	int opt;
 	const char *filename = NULL;
 	const char *directory = NULL;
+	const char *fstype = "ext4";
 	char *mountpoint = NULL;
 	fs_config_func_t fs_config_func = NULL;
 	int gzip = 0;
@@ -76,8 +77,11 @@ int main(int argc, char **argv)
 	struct selinux_opt seopts[] = { { SELABEL_OPT_PATH, "" } };
 #endif
 
-	while ((opt = getopt(argc, argv, "l:j:b:g:i:I:L:a:S:fwzJsctv")) != -1) {
+	while ((opt = getopt(argc, argv, "T:l:j:b:g:i:I:L:a:S:fwzJsctv")) != -1) {
 		switch (opt) {
+		case 'T':
+			fstype = optarg;
+			break;
 		case 'l':
 			info.len = parse_num(optarg);
 			break;
@@ -200,7 +204,7 @@ int main(int argc, char **argv)
 		fd = STDOUT_FILENO;
 	}
 
-	exitcode = make_extfs_internal(fd, "ext4", directory, mountpoint, fs_config_func, gzip,
+	exitcode = make_extfs_internal(fd, fstype, directory, mountpoint, fs_config_func, gzip,
 			sparse, crc, wipe, sehnd, verbose);
 	close(fd);
 
