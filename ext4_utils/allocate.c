@@ -647,13 +647,17 @@ static int advance_list_ptr(struct region_list *list, int blocks)
 	while (reg != NULL && blocks > 0) {
 		if (reg->len > list->partial_iter + blocks) {
 			list->partial_iter += blocks;
-			return 0;
+			blocks = 0;
+			break;
 		}
 
 		blocks -= (reg->len - list->partial_iter);
 		list->partial_iter = 0;
 		reg = reg->next;
 	}
+
+	if (reg)
+		list->iter = reg;
 
 	if (blocks > 0)
 		return -1;
