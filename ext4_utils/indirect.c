@@ -100,15 +100,22 @@ static void reserve_tindirect_block(struct block_allocation *alloc, int len)
 	}
 }
 
-static void fill_indirect_block(u32 *ind_block, int len, struct block_allocation *alloc)
+static int fill_indirect_block(u32 *ind_block, int len, struct block_allocation *alloc)
 {
 	int i;
 	for (i = 0; i < len; i++) {
 		ind_block[i] = get_block(alloc, i);
 	}
+
+	if (advance_blocks(alloc, len)) {
+		error("failed to advance %d blocks", len);
+		return -1;
+	}
+
+	return 0;
 }
 
-static void fill_dindirect_block(u32 *dind_block, int len, struct block_allocation *alloc)
+static int fill_dindirect_block(u32 *dind_block, int len, struct block_allocation *alloc)
 {
 	int i;
 	u32 ind_block;
@@ -117,7 +124,7 @@ static void fill_dindirect_block(u32 *dind_block, int len, struct block_allocati
 		ind_block = get_oob_block(alloc, 0);
 		if (advance_oob_blocks(alloc, 1)) {
 			error("failed to reserve oob block");
-			return;
+			return -1;
 		}
 
 		dind_block[i] = ind_block;
@@ -127,18 +134,16 @@ static void fill_dindirect_block(u32 *dind_block, int len, struct block_allocati
 				ind_block);
 		int ind_block_len = min((int)aux_info.blocks_per_ind, len);
 
-		fill_indirect_block(ind_block_data, ind_block_len, alloc);
-
-		if (advance_blocks(alloc, ind_block_len)) {
-			error("failed to advance %d blocks", ind_block_len);
-			return;
-		}
+		if (fill_indirect_block(ind_block_data, ind_block_len, alloc))
+			return -1;
 
 		len -= ind_block_len;
 	}
+
+	return 0;
 }
 
-static void fill_tindirect_block(u32 *tind_block, int len, struct block_allocation *alloc)
+static int fill_tindirect_block(u32 *tind_block, int len, struct block_allocation *alloc)
 {
 	int i;
 	u32 dind_block;
@@ -147,7 +152,7 @@ static void fill_tindirect_block(u32 *tind_block, int len, struct block_allocati
 		dind_block = get_oob_block(alloc, 0);
 		if (advance_oob_blocks(alloc, 1)) {
 			error("failed to reserve oob block");
-			return;
+			return -1;
 		}
 
 		tind_block[i] = dind_block;
@@ -157,10 +162,13 @@ static void fill_tindirect_block(u32 *tind_block, int len, struct block_allocati
 				dind_block);
 		int dind_block_len = min((int)aux_info.blocks_per_dind, len);
 
-		fill_dindirect_block(dind_block_data, dind_block_len, alloc);
+		if (fill_dindirect_block(dind_block_data, dind_block_len, alloc))
+			return -1;
 
 		len -= dind_block_len;
 	}
+
+	return 0;
 }
 
 /* Given an allocation, attach as many blocks as possible to direct inode
@@ -205,12 +213,8 @@ static int inode_attach_indirect_blocks(struct ext4_inode *inode,
 	sparse_file_add_data(info.sparse_file, ind_block_data, info.block_size,
 			ind_block);
 
-	fill_indirect_block(ind_block_data, len, alloc);
-
-	if (advance_blocks(alloc, len)) {
-		error("failed to advance %d blocks", len);
+	if (fill_indirect_block(ind_block_data, len, alloc))
 		return -1;
-	}
 
 	*block_len -= len;
 	return 0;
@@ -237,12 +241,8 @@ static int inode_attach_dindirect_blocks(struct ext4_inode *inode,
 	sparse_file_add_data(info.sparse_file, dind_block_data, info.block_size,
 			dind_block);
 
-	fill_dindirect_block(dind_block_data, len, alloc);
-
-	if (advance_blocks(alloc, len)) {
-		error("failed to advance %d blocks", len);
+	if (fill_dindirect_block(dind_block_data, len, alloc))
 		return -1;
-	}
 
 	*block_len -= len;
 	return 0;
@@ -269,12 +269,8 @@ static int inode_attach_tindirect_blocks(struct ext4_inode *inode,
 	sparse_file_add_data(info.sparse_file, tind_block_data, info.block_size,
 			tind_block);
 
-	fill_tindirect_block(tind_block_data, len, alloc);
-
-	if (advance_blocks(alloc, len)) {
-		error("failed to advance %d blocks", len);
+	if (fill_tindirect_block(tind_block_data, len, alloc))
 		return -1;
-	}
 
 	*block_len -= len;
 	return 0;
