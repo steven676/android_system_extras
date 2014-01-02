@@ -30,9 +30,6 @@
 static u8 *create_backing(struct block_allocation *alloc,
 		unsigned long backing_len)
 {
-	if (DIV_ROUND_UP(backing_len, info.block_size) > EXT4_NDIR_BLOCKS)
-		critical_error("indirect backing larger than %d blocks", EXT4_NDIR_BLOCKS);
-
 	u8 *data = calloc(backing_len, 1);
 	if (!data)
 		critical_error_errno("calloc");
@@ -52,6 +49,27 @@ static u8 *create_backing(struct block_allocation *alloc,
 	}
 
 	return data;
+}
+
+/* Creates data buffers for the first backing_len bytes of a block allocation
+   and queues them to be written */
+static void create_backing_file(struct block_allocation *alloc,
+		unsigned long backing_len, const char *filename)
+{
+	off64_t offset = 0;
+	for (; alloc != NULL && backing_len > 0; get_next_region(alloc)) {
+		u32 region_block;
+		u32 region_len;
+		u32 len;
+		get_region(alloc, &region_block, &region_len);
+
+		len = min(region_len * info.block_size, backing_len);
+
+		sparse_file_add_file(info.sparse_file, filename, offset, len,
+				region_block);
+		offset += len;
+		backing_len -= len;
+	}
 }
 
 static void reserve_indirect_block(struct block_allocation *alloc, int len)
@@ -488,6 +506,7 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
 {
 	struct block_allocation *alloc;
 	u32 block_len = DIV_ROUND_UP(len, info.block_size);
+	u32 indirect_len = indirect_blocks_needed(block_len);
 	u8 *data = NULL;
 
 	alloc = do_inode_allocate_indirect(block_len);
@@ -496,6 +515,9 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
 		return NULL;
 	}
 
+	reserve_all_indirect_blocks(alloc, block_len);
+
+	rewind_alloc(alloc);
 	if (backing_len) {
 		data = create_backing(alloc, backing_len);
 		if (!data)
@@ -508,5 +530,41 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
 
 	free_alloc(alloc);
 
+	inode->i_flags = 0;
+	inode->i_blocks_lo = (block_len + indirect_len) * info.block_size / 512;
+	inode->i_size_lo = len;
+
 	return data;
+}
+
+/* Allocates enough blocks to hold len bytes, queues them to be written
+   from a file, and connects them to an inode. */
+void inode_allocate_file_indirect(struct ext4_inode *inode, unsigned long len,
+		const char *filename)
+{
+	struct block_allocation *alloc;
+	u32 block_len = DIV_ROUND_UP(len, info.block_size);
+	u32 indirect_len = indirect_blocks_needed(block_len);
+	u8 *data = NULL;
+
+	alloc = do_inode_allocate_indirect(block_len);
+	if (alloc == NULL) {
+		error("failed to allocate extents for %lu bytes", len);
+		return;
+	}
+
+	reserve_all_indirect_blocks(alloc, block_len);
+
+	rewind_alloc(alloc);
+	create_backing_file(alloc, len, filename);
+
+	rewind_alloc(alloc);
+	if (do_inode_attach_indirect(inode, alloc, block_len))
+		error("failed to attach blocks to indirect inode");
+
+	inode->i_flags = 0;
+	inode->i_blocks_lo = (block_len + indirect_len) * info.block_size / 512;
+	inode->i_size_lo = len;
+
+	free_alloc(alloc);
 }
